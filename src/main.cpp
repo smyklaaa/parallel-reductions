@@ -1,4 +1,6 @@
 #include "argument_parser.hpp"
+#include "csv_writer.hpp"
+#include "cuda_backend.hpp"
 #include "sequential_backend.hpp"
 
 #include <iostream>
@@ -13,12 +15,13 @@ int main(int argc, char** argv) {
         if (config.backend == BackendType::Sequential) {
             BenchmarkResult result = runSequential(config);
             printBenchmarkResult(result);
+            appendResultToCsv(result, config.outputFile);
+            std::cout << "Result saved to CSV: " << config.outputFile << "\n";
             return 0;
-        }
+}
 
         if (config.backend == BackendType::CUDA) {
-            std::cout << "CUDA backend selected.\n";
-            std::cout << "CUDA availability check will be added in the next step.\n";
+            runCUDA(config);
             return 0;
         }
 

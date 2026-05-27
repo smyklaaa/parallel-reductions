@@ -57,10 +57,12 @@ static BenchmarkResult runSequentialTyped(const AppConfig& config) {
         T sum = std::accumulate(data.begin(), data.end(), static_cast<T>(0));
 
         auto end = std::chrono::high_resolution_clock::now();
-        result.timeMs = std::chrono::duration<double, std::milli>(end - start).count();
 
-        result.resultSummary = "sum = " + valueToString(sum);
+        result.timeMs = std::chrono::duration<double, std::milli>(end - start).count();
         result.throughputGBs = (static_cast<double>(config.size * sizeof(T)) / 1e9) / (result.timeMs / 1000.0);
+        result.absoluteError = 0.0;
+        result.relativeError = 0.0;
+        result.resultSummary = "sum = " + valueToString(sum);
 
         return result;
     }
@@ -69,10 +71,12 @@ static BenchmarkResult runSequentialTyped(const AppConfig& config) {
         T minValue = *std::min_element(data.begin(), data.end());
 
         auto end = std::chrono::high_resolution_clock::now();
-        result.timeMs = std::chrono::duration<double, std::milli>(end - start).count();
 
-        result.resultSummary = "min = " + valueToString(minValue);
+        result.timeMs = std::chrono::duration<double, std::milli>(end - start).count();
         result.throughputGBs = (static_cast<double>(config.size * sizeof(T)) / 1e9) / (result.timeMs / 1000.0);
+        result.absoluteError = 0.0;
+        result.relativeError = 0.0;
+        result.resultSummary = "min = " + valueToString(minValue);
 
         return result;
     }
@@ -81,10 +85,12 @@ static BenchmarkResult runSequentialTyped(const AppConfig& config) {
         T maxValue = *std::max_element(data.begin(), data.end());
 
         auto end = std::chrono::high_resolution_clock::now();
-        result.timeMs = std::chrono::duration<double, std::milli>(end - start).count();
 
-        result.resultSummary = "max = " + valueToString(maxValue);
+        result.timeMs = std::chrono::duration<double, std::milli>(end - start).count();
         result.throughputGBs = (static_cast<double>(config.size * sizeof(T)) / 1e9) / (result.timeMs / 1000.0);
+        result.absoluteError = 0.0;
+        result.relativeError = 0.0;
+        result.resultSummary = "max = " + valueToString(maxValue);
 
         return result;
     }
@@ -94,13 +100,14 @@ static BenchmarkResult runSequentialTyped(const AppConfig& config) {
         std::partial_sum(data.begin(), data.end(), output.begin());
 
         auto end = std::chrono::high_resolution_clock::now();
-        result.timeMs = std::chrono::duration<double, std::milli>(end - start).count();
 
+        result.timeMs = std::chrono::duration<double, std::milli>(end - start).count();
+        result.throughputGBs = (static_cast<double>(2 * config.size * sizeof(T)) / 1e9) / (result.timeMs / 1000.0);
+        result.absoluteError = 0.0;
+        result.relativeError = 0.0;
         result.resultSummary =
             "first = " + valueToString(output.front()) +
             ", last = " + valueToString(output.back());
-
-        result.throughputGBs = (static_cast<double>(2 * config.size * sizeof(T)) / 1e9) / (result.timeMs / 1000.0);
 
         return result;
     }
@@ -133,5 +140,7 @@ void printBenchmarkResult(const BenchmarkResult& result) {
         << "  Size: " << result.size << "\n"
         << "  Time: " << std::fixed << std::setprecision(4) << result.timeMs << " ms\n"
         << "  Throughput: " << std::fixed << std::setprecision(4) << result.throughputGBs << " GB/s\n"
+        << "  Absolute error: " << std::scientific << std::setprecision(6) << result.absoluteError << "\n"
+        << "  Relative error: " << std::scientific << std::setprecision(6) << result.relativeError << "\n"
         << "  " << result.resultSummary << "\n";
 }
