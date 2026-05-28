@@ -48,6 +48,9 @@ static BenchmarkResult runSequentialTyped(const AppConfig& config) {
     result.operation = toString(config.operation);
     result.dataType = toString(config.dataType);
     result.size = config.size;
+    result.threads = 1;
+    result.processes = 1;
+    result.blockSize = 0;
 
     std::vector<T> data = generateData<T>(config.size);
 
