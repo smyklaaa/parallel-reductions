@@ -1,6 +1,7 @@
 #include "cuda_backend.hpp"
 #include "csv_writer.hpp"
 #include "cuda_minmax.hpp"
+#include "cuda_scan.hpp"
 #include "cuda_sum.hpp"
 #include "cuda_vector_add.hpp"
 #include "sequential_backend.hpp"
@@ -84,6 +85,14 @@ void runCUDA(const AppConfig& config) {
 
     if (config.operation == OperationType::Max) {
         BenchmarkResult result = runCudaMax(config);
+        printBenchmarkResult(result);
+        appendResultToCsv(result, config.outputFile);
+        std::cout << "Result saved to CSV: " << config.outputFile << "\n";
+        return;
+    }
+
+    if (config.operation == OperationType::Scan) {
+        BenchmarkResult result = runCudaScan(config);
         printBenchmarkResult(result);
         appendResultToCsv(result, config.outputFile);
         std::cout << "Result saved to CSV: " << config.outputFile << "\n";

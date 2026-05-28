@@ -17,6 +17,7 @@ add_executable(parallel_reductions
     cuda/cuda_vector_add.cu
     cuda/cuda_sum.cu
     cuda/cuda_minmax.cu
+    cuda/cuda_scan.cu
 )
 
 target_include_directories(parallel_reductions PRIVATE include)
