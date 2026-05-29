@@ -50,12 +50,13 @@ static BenchmarkResult runCudaScanTyped(const AppConfig& config) {
     result.operation = "scan";
     result.dataType = toString(config.dataType);
     result.size = config.size;
+    result.threads = 1;
+    result.processes = 1;
+    result.blockSize = config.blockSize;
 
     std::vector<T> hostInput = generateCudaInputData<T>(config.size);
     std::vector<T> cpuOutput(config.size);
     std::vector<T> gpuOutput(config.size);
-
-    std::partial_sum(hostInput.begin(), hostInput.end(), cpuOutput.begin());
 
     int deviceCount = 0;
     checkCudaStatus(cudaGetDeviceCount(&deviceCount), "cudaGetDeviceCount failed");
@@ -64,16 +65,28 @@ static BenchmarkResult runCudaScanTyped(const AppConfig& config) {
         throw std::runtime_error("No CUDA-capable NVIDIA GPU detected.");
     }
 
-    auto start = std::chrono::high_resolution_clock::now();
+    auto totalStart = std::chrono::high_resolution_clock::now();
 
+    auto transferHostToDeviceStart = std::chrono::high_resolution_clock::now();
     thrust::device_vector<T> deviceInput(hostInput.begin(), hostInput.end());
+    checkCudaStatus(cudaDeviceSynchronize(), "cudaDeviceSynchronize after host to device failed");
+    auto transferHostToDeviceEnd = std::chrono::high_resolution_clock::now();
+
     thrust::device_vector<T> deviceOutput(config.size);
 
+    auto computeStart = std::chrono::high_resolution_clock::now();
     thrust::inclusive_scan(deviceInput.begin(), deviceInput.end(), deviceOutput.begin());
+    checkCudaStatus(cudaDeviceSynchronize(), "cudaDeviceSynchronize after inclusive scan failed");
+    auto computeEnd = std::chrono::high_resolution_clock::now();
 
+    auto transferDeviceToHostStart = std::chrono::high_resolution_clock::now();
     thrust::copy(deviceOutput.begin(), deviceOutput.end(), gpuOutput.begin());
+    checkCudaStatus(cudaDeviceSynchronize(), "cudaDeviceSynchronize after device to host failed");
+    auto transferDeviceToHostEnd = std::chrono::high_resolution_clock::now();
 
-    auto end = std::chrono::high_resolution_clock::now();
+    auto verificationStart = std::chrono::high_resolution_clock::now();
+
+    std::partial_sum(hostInput.begin(), hostInput.end(), cpuOutput.begin());
 
     double maxAbsoluteError = 0.0;
     double maxRelativeError = 0.0;
@@ -102,7 +115,16 @@ static BenchmarkResult runCudaScanTyped(const AppConfig& config) {
     double cpuFirst = static_cast<double>(cpuOutput.front());
     double cpuLast = static_cast<double>(cpuOutput.back());
 
-    result.timeMs = std::chrono::duration<double, std::milli>(end - start).count();
+    auto verificationEnd = std::chrono::high_resolution_clock::now();
+    auto totalEnd = std::chrono::high_resolution_clock::now();
+
+    double hostToDeviceMs = std::chrono::duration<double, std::milli>(transferHostToDeviceEnd - transferHostToDeviceStart).count();
+    double deviceToHostMs = std::chrono::duration<double, std::milli>(transferDeviceToHostEnd - transferDeviceToHostStart).count();
+
+    result.timeMs = std::chrono::duration<double, std::milli>(totalEnd - totalStart).count();
+    result.computeTimeMs = std::chrono::duration<double, std::milli>(computeEnd - computeStart).count();
+    result.transferTimeMs = hostToDeviceMs + deviceToHostMs;
+    result.verificationTimeMs = std::chrono::duration<double, std::milli>(verificationEnd - verificationStart).count();
     result.throughputGBs = (static_cast<double>(2 * config.size * sizeof(T)) / 1e9) / (result.timeMs / 1000.0);
     result.absoluteError = maxAbsoluteError;
     result.relativeError = maxRelativeError;

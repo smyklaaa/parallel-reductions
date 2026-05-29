@@ -129,6 +129,13 @@ static std::pair<std::size_t, std::size_t> getLocalRange(
     return {begin, begin + count};
 }
 
+static void setMPITiming(BenchmarkResult& result, double computeTimeMs, double verificationTimeMs) {
+    result.computeTimeMs = computeTimeMs;
+    result.transferTimeMs = 0.0;
+    result.verificationTimeMs = verificationTimeMs;
+    result.timeMs = computeTimeMs + verificationTimeMs;
+}
+
 template <typename T>
 static BenchmarkResult runMPITyped(const AppConfig& config) {
     MPI_Init(nullptr, nullptr);
@@ -162,7 +169,7 @@ static BenchmarkResult runMPITyped(const AppConfig& config) {
     std::vector<T> localData(fullData.begin() + begin, fullData.begin() + end);
 
     MPI_Barrier(MPI_COMM_WORLD);
-    auto start = std::chrono::high_resolution_clock::now();
+    auto computeStart = std::chrono::high_resolution_clock::now();
 
     if (config.operation == OperationType::Sum) {
         T localValue = std::accumulate(localData.begin(), localData.end(), static_cast<T>(0));
@@ -171,24 +178,31 @@ static BenchmarkResult runMPITyped(const AppConfig& config) {
         MPI_Allreduce(&localValue, &globalValue, 1, mpiType, MPI_SUM, MPI_COMM_WORLD);
 
         MPI_Barrier(MPI_COMM_WORLD);
-        auto finish = std::chrono::high_resolution_clock::now();
+        auto computeEnd = std::chrono::high_resolution_clock::now();
 
-        double localTimeMs = std::chrono::duration<double, std::milli>(finish - start).count();
-        double globalTimeMs = 0.0;
+        double localComputeTimeMs = std::chrono::duration<double, std::milli>(computeEnd - computeStart).count();
+        double globalComputeTimeMs = 0.0;
 
-        MPI_Reduce(&localTimeMs, &globalTimeMs, 1, MPI_DOUBLE, MPI_MAX, 0, MPI_COMM_WORLD);
+        MPI_Reduce(&localComputeTimeMs, &globalComputeTimeMs, 1, MPI_DOUBLE, MPI_MAX, 0, MPI_COMM_WORLD);
 
         if (rank == 0) {
-            result.timeMs = globalTimeMs;
-            result.throughputGBs =
-                (static_cast<double>(config.size * sizeof(T)) / 1e9) /
-                (result.timeMs / 1000.0);
+            double verificationTimeMs = 0.0;
 
             if (config.verify) {
+                auto verificationStart = std::chrono::high_resolution_clock::now();
+
                 long double reference = referenceSumLongDouble(fullData);
                 result.absoluteError = absoluteDifferenceLongDouble(globalValue, reference);
                 result.relativeError = relativeDifferenceLongDouble(globalValue, reference);
+
+                auto verificationEnd = std::chrono::high_resolution_clock::now();
+                verificationTimeMs = std::chrono::duration<double, std::milli>(verificationEnd - verificationStart).count();
             }
+
+            setMPITiming(result, globalComputeTimeMs, verificationTimeMs);
+            result.throughputGBs =
+                (static_cast<double>(config.size * sizeof(T)) / 1e9) /
+                (result.timeMs / 1000.0);
 
             result.resultSummary = "sum = " + valueToString(globalValue);
         }
@@ -212,24 +226,31 @@ static BenchmarkResult runMPITyped(const AppConfig& config) {
         MPI_Allreduce(&localValue, &globalValue, 1, mpiType, MPI_MIN, MPI_COMM_WORLD);
 
         MPI_Barrier(MPI_COMM_WORLD);
-        auto finish = std::chrono::high_resolution_clock::now();
+        auto computeEnd = std::chrono::high_resolution_clock::now();
 
-        double localTimeMs = std::chrono::duration<double, std::milli>(finish - start).count();
-        double globalTimeMs = 0.0;
+        double localComputeTimeMs = std::chrono::duration<double, std::milli>(computeEnd - computeStart).count();
+        double globalComputeTimeMs = 0.0;
 
-        MPI_Reduce(&localTimeMs, &globalTimeMs, 1, MPI_DOUBLE, MPI_MAX, 0, MPI_COMM_WORLD);
+        MPI_Reduce(&localComputeTimeMs, &globalComputeTimeMs, 1, MPI_DOUBLE, MPI_MAX, 0, MPI_COMM_WORLD);
 
         if (rank == 0) {
-            result.timeMs = globalTimeMs;
-            result.throughputGBs =
-                (static_cast<double>(config.size * sizeof(T)) / 1e9) /
-                (result.timeMs / 1000.0);
+            double verificationTimeMs = 0.0;
 
             if (config.verify) {
+                auto verificationStart = std::chrono::high_resolution_clock::now();
+
                 T reference = *std::min_element(fullData.begin(), fullData.end());
                 result.absoluteError = absoluteDifference(globalValue, reference);
                 result.relativeError = relativeDifference(globalValue, reference);
+
+                auto verificationEnd = std::chrono::high_resolution_clock::now();
+                verificationTimeMs = std::chrono::duration<double, std::milli>(verificationEnd - verificationStart).count();
             }
+
+            setMPITiming(result, globalComputeTimeMs, verificationTimeMs);
+            result.throughputGBs =
+                (static_cast<double>(config.size * sizeof(T)) / 1e9) /
+                (result.timeMs / 1000.0);
 
             result.resultSummary = "min = " + valueToString(globalValue);
         }
@@ -253,24 +274,31 @@ static BenchmarkResult runMPITyped(const AppConfig& config) {
         MPI_Allreduce(&localValue, &globalValue, 1, mpiType, MPI_MAX, MPI_COMM_WORLD);
 
         MPI_Barrier(MPI_COMM_WORLD);
-        auto finish = std::chrono::high_resolution_clock::now();
+        auto computeEnd = std::chrono::high_resolution_clock::now();
 
-        double localTimeMs = std::chrono::duration<double, std::milli>(finish - start).count();
-        double globalTimeMs = 0.0;
+        double localComputeTimeMs = std::chrono::duration<double, std::milli>(computeEnd - computeStart).count();
+        double globalComputeTimeMs = 0.0;
 
-        MPI_Reduce(&localTimeMs, &globalTimeMs, 1, MPI_DOUBLE, MPI_MAX, 0, MPI_COMM_WORLD);
+        MPI_Reduce(&localComputeTimeMs, &globalComputeTimeMs, 1, MPI_DOUBLE, MPI_MAX, 0, MPI_COMM_WORLD);
 
         if (rank == 0) {
-            result.timeMs = globalTimeMs;
-            result.throughputGBs =
-                (static_cast<double>(config.size * sizeof(T)) / 1e9) /
-                (result.timeMs / 1000.0);
+            double verificationTimeMs = 0.0;
 
             if (config.verify) {
+                auto verificationStart = std::chrono::high_resolution_clock::now();
+
                 T reference = *std::max_element(fullData.begin(), fullData.end());
                 result.absoluteError = absoluteDifference(globalValue, reference);
                 result.relativeError = relativeDifference(globalValue, reference);
+
+                auto verificationEnd = std::chrono::high_resolution_clock::now();
+                verificationTimeMs = std::chrono::duration<double, std::milli>(verificationEnd - verificationStart).count();
             }
+
+            setMPITiming(result, globalComputeTimeMs, verificationTimeMs);
+            result.throughputGBs =
+                (static_cast<double>(config.size * sizeof(T)) / 1e9) /
+                (result.timeMs / 1000.0);
 
             result.resultSummary = "max = " + valueToString(globalValue);
         }
@@ -327,24 +355,31 @@ static BenchmarkResult runMPITyped(const AppConfig& config) {
         );
 
         MPI_Barrier(MPI_COMM_WORLD);
-        auto finish = std::chrono::high_resolution_clock::now();
+        auto computeEnd = std::chrono::high_resolution_clock::now();
 
-        double localTimeMs = std::chrono::duration<double, std::milli>(finish - start).count();
-        double globalTimeMs = 0.0;
+        double localComputeTimeMs = std::chrono::duration<double, std::milli>(computeEnd - computeStart).count();
+        double globalComputeTimeMs = 0.0;
 
-        MPI_Reduce(&localTimeMs, &globalTimeMs, 1, MPI_DOUBLE, MPI_MAX, 0, MPI_COMM_WORLD);
+        MPI_Reduce(&localComputeTimeMs, &globalComputeTimeMs, 1, MPI_DOUBLE, MPI_MAX, 0, MPI_COMM_WORLD);
 
         if (rank == 0) {
-            result.timeMs = globalTimeMs;
-            result.throughputGBs =
-                (static_cast<double>(2 * config.size * sizeof(T)) / 1e9) /
-                (result.timeMs / 1000.0);
+            double verificationTimeMs = 0.0;
 
             if (config.verify) {
+                auto verificationStart = std::chrono::high_resolution_clock::now();
+
                 long double reference = referenceSumLongDouble(fullData);
                 result.absoluteError = absoluteDifferenceLongDouble(globalLast, reference);
                 result.relativeError = relativeDifferenceLongDouble(globalLast, reference);
+
+                auto verificationEnd = std::chrono::high_resolution_clock::now();
+                verificationTimeMs = std::chrono::duration<double, std::milli>(verificationEnd - verificationStart).count();
             }
+
+            setMPITiming(result, globalComputeTimeMs, verificationTimeMs);
+            result.throughputGBs =
+                (static_cast<double>(2 * config.size * sizeof(T)) / 1e9) /
+                (result.timeMs / 1000.0);
 
             result.resultSummary =
                 "first = " + valueToString(fullData.front()) +

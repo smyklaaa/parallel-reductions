@@ -24,20 +24,23 @@ void appendResultToCsv(const BenchmarkResult& result, const std::string& outputF
     }
 
     if (writeHeader) {
-        file << "backend,operation,data_type,size,threads,processes,block_size,time_ms,throughput_gbs,absolute_error,relative_error,result_summary\n";
+        file << "backend,operation,data_type,size,threads,processes,block_size,time_ms,compute_time_ms,transfer_time_ms,verification_time_ms,throughput_gbs,absolute_error,relative_error,result_summary\n";
     }
 
     file << result.backend << ","
-            << result.operation << ","
-            << result.dataType << ","
-            << result.size << ","
-            << result.threads << ","
-            << result.processes << ","
-            << result.blockSize << ","
-            << result.timeMs << ","
-            << result.throughputGBs << ","
-            << result.absoluteError << ","
-            << result.relativeError << ","
-            << "\"" << result.resultSummary << "\""
-            << "\n";
+         << result.operation << ","
+         << result.dataType << ","
+         << result.size << ","
+         << result.threads << ","
+         << result.processes << ","
+         << result.blockSize << ","
+         << result.timeMs << ","
+         << result.computeTimeMs << ","
+         << result.transferTimeMs << ","
+         << result.verificationTimeMs << ","
+         << result.throughputGBs << ","
+         << result.absoluteError << ","
+         << result.relativeError << ","
+         << "\"" << result.resultSummary << "\""
+         << "\n";
 }

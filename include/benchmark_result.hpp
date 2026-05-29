@@ -12,6 +12,9 @@ struct BenchmarkResult {
     int processes = 1;
     int blockSize = 256;
     double timeMs = 0.0;
+    double computeTimeMs = 0.0;
+    double transferTimeMs = 0.0;
+    double verificationTimeMs = 0.0;
     double throughputGBs = 0.0;
     double absoluteError = 0.0;
     double relativeError = 0.0;

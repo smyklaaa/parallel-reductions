@@ -81,6 +81,7 @@ static BenchmarkResult runCudaSumTyped(const AppConfig& config) {
     result.threads = 1;
     result.processes = 1;
     result.blockSize = config.blockSize;
+
     std::vector<T> hostInput = generateCudaInputData<T>(config.size);
 
     int deviceCount = 0;
@@ -104,29 +105,33 @@ static BenchmarkResult runCudaSumTyped(const AppConfig& config) {
 
     std::size_t inputBytes = config.size * sizeof(T);
     std::size_t partialBytes = gridSize * sizeof(T);
+    std::size_t sharedMemorySize = blockSize * sizeof(T);
 
-    auto start = std::chrono::high_resolution_clock::now();
+    auto totalStart = std::chrono::high_resolution_clock::now();
 
     checkCudaStatus(cudaMalloc(&deviceInput, inputBytes), "cudaMalloc deviceInput failed");
     checkCudaStatus(cudaMalloc(&devicePartialSums, partialBytes), "cudaMalloc devicePartialSums failed");
 
+    auto transferStart = std::chrono::high_resolution_clock::now();
     checkCudaStatus(cudaMemcpy(deviceInput, hostInput.data(), inputBytes, cudaMemcpyHostToDevice), "cudaMemcpy input failed");
+    auto transferAfterHostToDevice = std::chrono::high_resolution_clock::now();
 
-    std::size_t sharedMemorySize = blockSize * sizeof(T);
-
+    auto computeStart = std::chrono::high_resolution_clock::now();
     cudaSumKernel<T><<<gridSize, blockSize, sharedMemorySize>>>(deviceInput, devicePartialSums, config.size);
     checkCudaStatus(cudaGetLastError(), "cudaSumKernel launch failed");
     checkCudaStatus(cudaDeviceSynchronize(), "cudaDeviceSynchronize failed");
+    auto computeAfterKernel = std::chrono::high_resolution_clock::now();
 
+    auto transferDeviceToHostStart = std::chrono::high_resolution_clock::now();
     checkCudaStatus(cudaMemcpy(hostPartialSums.data(), devicePartialSums, partialBytes, cudaMemcpyDeviceToHost), "cudaMemcpy partial sums failed");
+    auto transferEnd = std::chrono::high_resolution_clock::now();
 
-    checkCudaStatus(cudaFree(deviceInput), "cudaFree deviceInput failed");
-    checkCudaStatus(cudaFree(devicePartialSums), "cudaFree devicePartialSums failed");
-
+    auto computeCpuFinishStart = std::chrono::high_resolution_clock::now();
     T gpuSum = std::accumulate(hostPartialSums.begin(), hostPartialSums.end(), static_cast<T>(0));
-    T cpuSum = std::accumulate(hostInput.begin(), hostInput.end(), static_cast<T>(0));
+    auto computeEnd = std::chrono::high_resolution_clock::now();
 
-    auto end = std::chrono::high_resolution_clock::now();
+    auto verificationStart = std::chrono::high_resolution_clock::now();
+    T cpuSum = std::accumulate(hostInput.begin(), hostInput.end(), static_cast<T>(0));
 
     double gpuValue = static_cast<double>(gpuSum);
     double cpuValue = static_cast<double>(cpuSum);
@@ -137,7 +142,22 @@ static BenchmarkResult runCudaSumTyped(const AppConfig& config) {
         relativeError = absoluteError / std::abs(cpuValue);
     }
 
-    result.timeMs = std::chrono::duration<double, std::milli>(end - start).count();
+    auto verificationEnd = std::chrono::high_resolution_clock::now();
+
+    checkCudaStatus(cudaFree(deviceInput), "cudaFree deviceInput failed");
+    checkCudaStatus(cudaFree(devicePartialSums), "cudaFree devicePartialSums failed");
+
+    auto totalEnd = std::chrono::high_resolution_clock::now();
+
+    double hostToDeviceMs = std::chrono::duration<double, std::milli>(transferAfterHostToDevice - transferStart).count();
+    double deviceToHostMs = std::chrono::duration<double, std::milli>(transferEnd - transferDeviceToHostStart).count();
+    double kernelMs = std::chrono::duration<double, std::milli>(computeAfterKernel - computeStart).count();
+    double cpuFinishMs = std::chrono::duration<double, std::milli>(computeEnd - computeCpuFinishStart).count();
+
+    result.timeMs = std::chrono::duration<double, std::milli>(totalEnd - totalStart).count();
+    result.computeTimeMs = kernelMs + cpuFinishMs;
+    result.transferTimeMs = hostToDeviceMs + deviceToHostMs;
+    result.verificationTimeMs = std::chrono::duration<double, std::milli>(verificationEnd - verificationStart).count();
     result.throughputGBs = (static_cast<double>(config.size * sizeof(T)) / 1e9) / (result.timeMs / 1000.0);
     result.absoluteError = absoluteError;
     result.relativeError = relativeError;

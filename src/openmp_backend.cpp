@@ -120,7 +120,7 @@ static std::vector<T> blellochInclusiveScanOpenMP(const std::vector<T>& input) {
     for (std::size_t stride = 1; stride < paddedSize; stride *= 2) {
         const std::size_t step = stride * 2;
 
-    #pragma omp parallel for
+        #pragma omp parallel for
         for (std::size_t i = step - 1; i < paddedSize; i += step) {
             scanData[i] += scanData[i - stride];
         }
@@ -131,7 +131,7 @@ static std::vector<T> blellochInclusiveScanOpenMP(const std::vector<T>& input) {
     for (std::size_t stride = paddedSize / 2; stride >= 1; stride /= 2) {
         const std::size_t step = stride * 2;
 
-    #pragma omp parallel for
+        #pragma omp parallel for
         for (std::size_t i = step - 1; i < paddedSize; i += step) {
             T temporary = scanData[i - stride];
             scanData[i - stride] = scanData[i];
@@ -153,6 +153,13 @@ static std::vector<T> blellochInclusiveScanOpenMP(const std::vector<T>& input) {
     return output;
 }
 
+static void setOpenMPTiming(BenchmarkResult& result, double computeTimeMs, double verificationTimeMs) {
+    result.computeTimeMs = computeTimeMs;
+    result.transferTimeMs = 0.0;
+    result.verificationTimeMs = verificationTimeMs;
+    result.timeMs = computeTimeMs + verificationTimeMs;
+}
+
 template <typename T>
 static BenchmarkResult runOpenMPTyped(const AppConfig& config) {
     BenchmarkResult result;
@@ -162,7 +169,7 @@ static BenchmarkResult runOpenMPTyped(const AppConfig& config) {
     result.size = config.size;
     result.threads = config.threads;
     result.processes = 1;
-    result.blockSize = 0; 
+    result.blockSize = 0;
 
     if (config.size == 0) {
         throw std::runtime_error("Size must be greater than zero.");
@@ -176,22 +183,31 @@ static BenchmarkResult runOpenMPTyped(const AppConfig& config) {
     if (config.operation == OperationType::Sum) {
         T parallelSum = static_cast<T>(0);
 
-        auto start = std::chrono::high_resolution_clock::now();
+        auto computeStart = std::chrono::high_resolution_clock::now();
 
         #pragma omp parallel for reduction(+ : parallelSum)
         for (std::size_t i = 0; i < data.size(); i++) {
             parallelSum += data[i];
         }
 
-        auto end = std::chrono::high_resolution_clock::now();
+        auto computeEnd = std::chrono::high_resolution_clock::now();
+
+        double verificationTimeMs = 0.0;
 
         if (config.verify) {
+            auto verificationStart = std::chrono::high_resolution_clock::now();
+
             long double referenceSum = referenceSumLongDouble(data);
             result.absoluteError = absoluteDifferenceLongDouble(parallelSum, referenceSum);
             result.relativeError = relativeDifferenceLongDouble(parallelSum, referenceSum);
+
+            auto verificationEnd = std::chrono::high_resolution_clock::now();
+            verificationTimeMs = std::chrono::duration<double, std::milli>(verificationEnd - verificationStart).count();
         }
 
-        result.timeMs = std::chrono::duration<double, std::milli>(end - start).count();
+        double computeTimeMs = std::chrono::duration<double, std::milli>(computeEnd - computeStart).count();
+
+        setOpenMPTiming(result, computeTimeMs, verificationTimeMs);
         result.throughputGBs =
             (static_cast<double>(config.size * sizeof(T)) / 1e9) /
             (result.timeMs / 1000.0);
@@ -204,22 +220,31 @@ static BenchmarkResult runOpenMPTyped(const AppConfig& config) {
     if (config.operation == OperationType::Min) {
         T parallelMin = std::numeric_limits<T>::max();
 
-        auto start = std::chrono::high_resolution_clock::now();
+        auto computeStart = std::chrono::high_resolution_clock::now();
 
         #pragma omp parallel for reduction(min : parallelMin)
         for (std::size_t i = 0; i < data.size(); i++) {
             parallelMin = std::min(parallelMin, data[i]);
         }
 
-        auto end = std::chrono::high_resolution_clock::now();
+        auto computeEnd = std::chrono::high_resolution_clock::now();
+
+        double verificationTimeMs = 0.0;
 
         if (config.verify) {
+            auto verificationStart = std::chrono::high_resolution_clock::now();
+
             T sequentialMin = *std::min_element(data.begin(), data.end());
             result.absoluteError = absoluteDifference(parallelMin, sequentialMin);
             result.relativeError = relativeDifference(parallelMin, sequentialMin);
+
+            auto verificationEnd = std::chrono::high_resolution_clock::now();
+            verificationTimeMs = std::chrono::duration<double, std::milli>(verificationEnd - verificationStart).count();
         }
 
-        result.timeMs = std::chrono::duration<double, std::milli>(end - start).count();
+        double computeTimeMs = std::chrono::duration<double, std::milli>(computeEnd - computeStart).count();
+
+        setOpenMPTiming(result, computeTimeMs, verificationTimeMs);
         result.throughputGBs =
             (static_cast<double>(config.size * sizeof(T)) / 1e9) /
             (result.timeMs / 1000.0);
@@ -232,22 +257,31 @@ static BenchmarkResult runOpenMPTyped(const AppConfig& config) {
     if (config.operation == OperationType::Max) {
         T parallelMax = std::numeric_limits<T>::lowest();
 
-        auto start = std::chrono::high_resolution_clock::now();
+        auto computeStart = std::chrono::high_resolution_clock::now();
 
         #pragma omp parallel for reduction(max : parallelMax)
         for (std::size_t i = 0; i < data.size(); i++) {
             parallelMax = std::max(parallelMax, data[i]);
         }
 
-        auto end = std::chrono::high_resolution_clock::now();
+        auto computeEnd = std::chrono::high_resolution_clock::now();
+
+        double verificationTimeMs = 0.0;
 
         if (config.verify) {
+            auto verificationStart = std::chrono::high_resolution_clock::now();
+
             T sequentialMax = *std::max_element(data.begin(), data.end());
             result.absoluteError = absoluteDifference(parallelMax, sequentialMax);
             result.relativeError = relativeDifference(parallelMax, sequentialMax);
+
+            auto verificationEnd = std::chrono::high_resolution_clock::now();
+            verificationTimeMs = std::chrono::duration<double, std::milli>(verificationEnd - verificationStart).count();
         }
 
-        result.timeMs = std::chrono::duration<double, std::milli>(end - start).count();
+        double computeTimeMs = std::chrono::duration<double, std::milli>(computeEnd - computeStart).count();
+
+        setOpenMPTiming(result, computeTimeMs, verificationTimeMs);
         result.throughputGBs =
             (static_cast<double>(config.size * sizeof(T)) / 1e9) /
             (result.timeMs / 1000.0);
@@ -258,20 +292,28 @@ static BenchmarkResult runOpenMPTyped(const AppConfig& config) {
     }
 
     if (config.operation == OperationType::Scan) {
-        auto start = std::chrono::high_resolution_clock::now();
+        auto computeStart = std::chrono::high_resolution_clock::now();
 
         std::vector<T> output = blellochInclusiveScanOpenMP(data);
 
-        auto end = std::chrono::high_resolution_clock::now();
+        auto computeEnd = std::chrono::high_resolution_clock::now();
+
+        double verificationTimeMs = 0.0;
 
         if (config.verify) {
+            auto verificationStart = std::chrono::high_resolution_clock::now();
+
             long double referenceLast = referenceSumLongDouble(data);
             result.absoluteError = absoluteDifferenceLongDouble(output.back(), referenceLast);
             result.relativeError = relativeDifferenceLongDouble(output.back(), referenceLast);
+
+            auto verificationEnd = std::chrono::high_resolution_clock::now();
+            verificationTimeMs = std::chrono::duration<double, std::milli>(verificationEnd - verificationStart).count();
         }
 
-        result.timeMs = std::chrono::duration<double, std::milli>(end - start).count();
+        double computeTimeMs = std::chrono::duration<double, std::milli>(computeEnd - computeStart).count();
 
+        setOpenMPTiming(result, computeTimeMs, verificationTimeMs);
         result.throughputGBs =
             (static_cast<double>(2 * config.size * sizeof(T)) / 1e9) /
             (result.timeMs / 1000.0);

@@ -42,6 +42,14 @@ static std::string valueToString(T value) {
 }
 
 template <typename T>
+static void setSequentialTiming(BenchmarkResult& result, double computeTimeMs) {
+    result.computeTimeMs = computeTimeMs;
+    result.transferTimeMs = 0.0;
+    result.verificationTimeMs = 0.0;
+    result.timeMs = computeTimeMs;
+}
+
+template <typename T>
 static BenchmarkResult runSequentialTyped(const AppConfig& config) {
     BenchmarkResult result;
     result.backend = "sequential";
@@ -54,14 +62,15 @@ static BenchmarkResult runSequentialTyped(const AppConfig& config) {
 
     std::vector<T> data = generateData<T>(config.size);
 
-    auto start = std::chrono::high_resolution_clock::now();
-
     if (config.operation == OperationType::Sum) {
+        auto start = std::chrono::high_resolution_clock::now();
+
         T sum = std::accumulate(data.begin(), data.end(), static_cast<T>(0));
 
         auto end = std::chrono::high_resolution_clock::now();
+        double computeTimeMs = std::chrono::duration<double, std::milli>(end - start).count();
 
-        result.timeMs = std::chrono::duration<double, std::milli>(end - start).count();
+        setSequentialTiming<T>(result, computeTimeMs);
         result.throughputGBs = (static_cast<double>(config.size * sizeof(T)) / 1e9) / (result.timeMs / 1000.0);
         result.absoluteError = 0.0;
         result.relativeError = 0.0;
@@ -71,11 +80,14 @@ static BenchmarkResult runSequentialTyped(const AppConfig& config) {
     }
 
     if (config.operation == OperationType::Min) {
+        auto start = std::chrono::high_resolution_clock::now();
+
         T minValue = *std::min_element(data.begin(), data.end());
 
         auto end = std::chrono::high_resolution_clock::now();
+        double computeTimeMs = std::chrono::duration<double, std::milli>(end - start).count();
 
-        result.timeMs = std::chrono::duration<double, std::milli>(end - start).count();
+        setSequentialTiming<T>(result, computeTimeMs);
         result.throughputGBs = (static_cast<double>(config.size * sizeof(T)) / 1e9) / (result.timeMs / 1000.0);
         result.absoluteError = 0.0;
         result.relativeError = 0.0;
@@ -85,11 +97,14 @@ static BenchmarkResult runSequentialTyped(const AppConfig& config) {
     }
 
     if (config.operation == OperationType::Max) {
+        auto start = std::chrono::high_resolution_clock::now();
+
         T maxValue = *std::max_element(data.begin(), data.end());
 
         auto end = std::chrono::high_resolution_clock::now();
+        double computeTimeMs = std::chrono::duration<double, std::milli>(end - start).count();
 
-        result.timeMs = std::chrono::duration<double, std::milli>(end - start).count();
+        setSequentialTiming<T>(result, computeTimeMs);
         result.throughputGBs = (static_cast<double>(config.size * sizeof(T)) / 1e9) / (result.timeMs / 1000.0);
         result.absoluteError = 0.0;
         result.relativeError = 0.0;
@@ -100,11 +115,15 @@ static BenchmarkResult runSequentialTyped(const AppConfig& config) {
 
     if (config.operation == OperationType::Scan) {
         std::vector<T> output(config.size);
+
+        auto start = std::chrono::high_resolution_clock::now();
+
         std::partial_sum(data.begin(), data.end(), output.begin());
 
         auto end = std::chrono::high_resolution_clock::now();
+        double computeTimeMs = std::chrono::duration<double, std::milli>(end - start).count();
 
-        result.timeMs = std::chrono::duration<double, std::milli>(end - start).count();
+        setSequentialTiming<T>(result, computeTimeMs);
         result.throughputGBs = (static_cast<double>(2 * config.size * sizeof(T)) / 1e9) / (result.timeMs / 1000.0);
         result.absoluteError = 0.0;
         result.relativeError = 0.0;
@@ -141,7 +160,10 @@ void printBenchmarkResult(const BenchmarkResult& result) {
         << "  Operation: " << result.operation << "\n"
         << "  Data type: " << result.dataType << "\n"
         << "  Size: " << result.size << "\n"
-        << "  Time: " << std::fixed << std::setprecision(4) << result.timeMs << " ms\n"
+        << "  Time total: " << std::fixed << std::setprecision(4) << result.timeMs << " ms\n"
+        << "  Time compute: " << std::fixed << std::setprecision(4) << result.computeTimeMs << " ms\n"
+        << "  Time transfer: " << std::fixed << std::setprecision(4) << result.transferTimeMs << " ms\n"
+        << "  Time verification: " << std::fixed << std::setprecision(4) << result.verificationTimeMs << " ms\n"
         << "  Throughput: " << std::fixed << std::setprecision(4) << result.throughputGBs << " GB/s\n"
         << "  Absolute error: " << std::scientific << std::setprecision(6) << result.absoluteError << "\n"
         << "  Relative error: " << std::scientific << std::setprecision(6) << result.relativeError << "\n"

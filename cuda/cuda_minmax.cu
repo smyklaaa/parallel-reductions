@@ -94,10 +94,10 @@ static BenchmarkResult runCudaMinMaxTyped(const AppConfig& config) {
     result.operation = FindMin ? "min" : "max";
     result.dataType = toString(config.dataType);
     result.size = config.size;
-    //
     result.threads = 1;
     result.processes = 1;
     result.blockSize = config.blockSize;
+
     std::vector<T> hostInput = generateCudaInputData<T>(config.size);
 
     int deviceCount = 0;
@@ -121,24 +121,28 @@ static BenchmarkResult runCudaMinMaxTyped(const AppConfig& config) {
 
     std::size_t inputBytes = config.size * sizeof(T);
     std::size_t partialBytes = gridSize * sizeof(T);
+    std::size_t sharedMemorySize = blockSize * sizeof(T);
 
-    auto start = std::chrono::high_resolution_clock::now();
+    auto totalStart = std::chrono::high_resolution_clock::now();
 
     checkCudaStatus(cudaMalloc(&deviceInput, inputBytes), "cudaMalloc deviceInput failed");
     checkCudaStatus(cudaMalloc(&devicePartialResults, partialBytes), "cudaMalloc devicePartialResults failed");
 
+    auto transferHostToDeviceStart = std::chrono::high_resolution_clock::now();
     checkCudaStatus(cudaMemcpy(deviceInput, hostInput.data(), inputBytes, cudaMemcpyHostToDevice), "cudaMemcpy input failed");
+    auto transferHostToDeviceEnd = std::chrono::high_resolution_clock::now();
 
-    std::size_t sharedMemorySize = blockSize * sizeof(T);
-
+    auto computeKernelStart = std::chrono::high_resolution_clock::now();
     cudaMinMaxKernel<T, FindMin><<<gridSize, blockSize, sharedMemorySize>>>(deviceInput, devicePartialResults, config.size);
     checkCudaStatus(cudaGetLastError(), "cudaMinMaxKernel launch failed");
     checkCudaStatus(cudaDeviceSynchronize(), "cudaDeviceSynchronize failed");
+    auto computeKernelEnd = std::chrono::high_resolution_clock::now();
 
+    auto transferDeviceToHostStart = std::chrono::high_resolution_clock::now();
     checkCudaStatus(cudaMemcpy(hostPartialResults.data(), devicePartialResults, partialBytes, cudaMemcpyDeviceToHost), "cudaMemcpy partial results failed");
+    auto transferDeviceToHostEnd = std::chrono::high_resolution_clock::now();
 
-    checkCudaStatus(cudaFree(deviceInput), "cudaFree deviceInput failed");
-    checkCudaStatus(cudaFree(devicePartialResults), "cudaFree devicePartialResults failed");
+    auto computeCpuStart = std::chrono::high_resolution_clock::now();
 
     T gpuValue;
 
@@ -148,6 +152,10 @@ static BenchmarkResult runCudaMinMaxTyped(const AppConfig& config) {
         gpuValue = *std::max_element(hostPartialResults.begin(), hostPartialResults.end());
     }
 
+    auto computeCpuEnd = std::chrono::high_resolution_clock::now();
+
+    auto verificationStart = std::chrono::high_resolution_clock::now();
+
     T cpuValue;
 
     if constexpr (FindMin) {
@@ -155,8 +163,6 @@ static BenchmarkResult runCudaMinMaxTyped(const AppConfig& config) {
     } else {
         cpuValue = *std::max_element(hostInput.begin(), hostInput.end());
     }
-
-    auto end = std::chrono::high_resolution_clock::now();
 
     double gpuDouble = static_cast<double>(gpuValue);
     double cpuDouble = static_cast<double>(cpuValue);
@@ -167,7 +173,22 @@ static BenchmarkResult runCudaMinMaxTyped(const AppConfig& config) {
         relativeError = absoluteError / std::abs(cpuDouble);
     }
 
-    result.timeMs = std::chrono::duration<double, std::milli>(end - start).count();
+    auto verificationEnd = std::chrono::high_resolution_clock::now();
+
+    checkCudaStatus(cudaFree(deviceInput), "cudaFree deviceInput failed");
+    checkCudaStatus(cudaFree(devicePartialResults), "cudaFree devicePartialResults failed");
+
+    auto totalEnd = std::chrono::high_resolution_clock::now();
+
+    double hostToDeviceMs = std::chrono::duration<double, std::milli>(transferHostToDeviceEnd - transferHostToDeviceStart).count();
+    double deviceToHostMs = std::chrono::duration<double, std::milli>(transferDeviceToHostEnd - transferDeviceToHostStart).count();
+    double kernelMs = std::chrono::duration<double, std::milli>(computeKernelEnd - computeKernelStart).count();
+    double cpuFinishMs = std::chrono::duration<double, std::milli>(computeCpuEnd - computeCpuStart).count();
+
+    result.timeMs = std::chrono::duration<double, std::milli>(totalEnd - totalStart).count();
+    result.computeTimeMs = kernelMs + cpuFinishMs;
+    result.transferTimeMs = hostToDeviceMs + deviceToHostMs;
+    result.verificationTimeMs = std::chrono::duration<double, std::milli>(verificationEnd - verificationStart).count();
     result.throughputGBs = (static_cast<double>(config.size * sizeof(T)) / 1e9) / (result.timeMs / 1000.0);
     result.absoluteError = absoluteError;
     result.relativeError = relativeError;
