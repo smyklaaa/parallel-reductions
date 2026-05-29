@@ -8,6 +8,9 @@ struct BenchmarkResult {
     std::string operation;
     std::string dataType;
     std::size_t size = 0;
+    int threads = 1;
+    int processes = 1;
+    int blockSize = 256;
     double timeMs = 0.0;
     double throughputGBs = 0.0;
     double absoluteError = 0.0;

@@ -78,7 +78,9 @@ static BenchmarkResult runCudaSumTyped(const AppConfig& config) {
     result.operation = "sum";
     result.dataType = toString(config.dataType);
     result.size = config.size;
-
+    result.threads = 1;
+    result.processes = 1;
+    result.blockSize = config.blockSize;
     std::vector<T> hostInput = generateCudaInputData<T>(config.size);
 
     int deviceCount = 0;
